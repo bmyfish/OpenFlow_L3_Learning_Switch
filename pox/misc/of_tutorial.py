@@ -83,41 +83,37 @@ class Tutorial (object):
     """
     Implement switch-like behavior.
     """
-
-    """ # DELETE THIS LINE TO START WORKING ON THIS (AND THE ONE BELOW!) #
-
-    # Here's some psuedocode to start you off implementing a learning
     # switch.  You'll need to rewrite it as real Python code.
 
     # Learn the port for the source MAC
-    self.mac_to_port ... <add or update entry>
+    self.mac_to_port[packet.src] = packet_in.in_port
 
-    if the port associated with the destination MAC of the packet is known:
+    if packet.dst in self.mac_to_port:
       # Send packet out the associated port
-      self.resend_packet(packet_in, ...)
+      port = self.mac_to_port[packet.dst]
+
+      #self.resend_packet(packet_in, port)
 
       # Once you have the above working, try pushing a flow entry
       # instead of resending the packet (comment out the above and
       # uncomment and complete the below.)
 
-      log.debug("Installing flow...")
+      log.debug("Installing flow for %s.%i -> %s.%i" % 
+                (packet.src, packet_in.in_port, packet.dst, port))
       # Maybe the log statement should have source/destination/port?
-
-      #msg = of.ofp_flow_mod()
-      #
-      ## Set fields to match received packet
-      #msg.match = of.ofp_match.from_packet(packet)
-      #
-      #< Set other fields of flow_mod (timeouts? buffer_id?) >
-      #
-      #< Add an output action, and send -- similar to resend_packet() >
+      msg = of.ofp_flow_mod()
+      msg.match = of.ofp_match.from_packet(packet, packet_in.in_port)
+      msg.idle_timeout = 10
+      msg.hard_timeout = 30
+      msg.actions.append(of.ofp_action_output(port = port))
+      msg.data = packet_in
+      self.connection.send(msg)
 
     else:
       # Flood the packet out everything but the input port
       # This part looks familiar, right?
       self.resend_packet(packet_in, of.OFPP_ALL)
 
-    """ # DELETE THIS LINE TO START WORKING ON THIS #
 
 
   def _handle_PacketIn (self, event):
@@ -134,8 +130,8 @@ class Tutorial (object):
 
     # Comment out the following line and uncomment the one after
     # when starting the exercise.
-    self.act_like_hub(packet, packet_in)
-    #self.act_like_switch(packet, packet_in)
+    #self.act_like_hub(packet, packet_in)
+    self.act_like_switch(packet, packet_in)
 
 
 
