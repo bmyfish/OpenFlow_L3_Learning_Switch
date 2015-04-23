@@ -33,14 +33,13 @@ import pox.openflow.libopenflow_01 as of
 
 log = core.getLogger()
 
-FLOW_IDLE_TIMEOUT = 10
-
+# since it is a small network, keep the routing table never expires 
 def dpid_to_mac (dpid):
   return EthAddr("%012x" % (dpid & 0xffFFffFFffFF,))
 
 class Entry (object):
   """
-  arpTable entry element 
+  datastructure to keep routing_table entry element 
   """
   def __init__ (self, port, mac):
     self.port = port
@@ -63,25 +62,23 @@ class Tutorial (object):
     # which switch port (keys are MACs, values are ports).
     #self.mac_to_port = {}
 
-    self.fakeways = ["10.0.1.1", "10.0.2.1", "10.0.3.1"]
     
     # (ip with network prefix, ip of host, interface name, interface address, switch port)
-    self.routing_table = {'10.0.1.0/24': ['10.0.1.100', 's1-eth1', '10.0.1.1', 1],
-                          '10.0.2.0/24': ['10.0.2.100', 's1-eth2', '10.0.2.1', 2],
-                          '10.0.3.0/24': ['10.0.3.100', 's1-eth3', '10.0.3.1', 3]}
-    self.ip_to_port = {}
-    self.arpTable = {}
+    # self.routing_table = {'10.0.1.0/24': ['10.0.1.100', 's1-eth1', '10.0.1.1', 1],
+    #                      '10.0.2.0/24': ['10.0.2.100', 's1-eth2', '10.0.2.1', 2],
+    #                      '10.0.3.0/24': ['10.0.3.100', 's1-eth3', '10.0.3.1', 3]}
+    self.gatewayaddr = ["10.0.1.1", "10.0.2.1", "10.0.3.1"]
+    self.routing_table = {}
     self.message_queue = {}
-    self.outstanding_arps = {}
 
 
   def _send_message_queue (self, dpid, ipaddr, macaddr, port):
     if (dpid,ipaddr) in self.message_queue:
-      bucket = self.message_queue[(dpid,ipaddr)]
+      ptr = self.message_queue[(dpid,ipaddr)]
       del self.message_queue[(dpid,ipaddr)]
       log.debug("Sending %i buffered packets to %s from %s"
-                % (len(bucket),ipaddr,dpid_to_str(dpid)))
-      for buffer_id,in_port in bucket:
+                % (len(ptr),ipaddr,dpid_to_str(dpid)))
+      for buffer_id,in_port in ptr:
         po = of.ofp_packet_out(buffer_id=buffer_id,in_port=in_port)
         po.actions.append(of.ofp_action_dl_addr.set_dst(macaddr))
         po.actions.append(of.ofp_action_output(port = port))
@@ -99,31 +96,29 @@ class Tutorial (object):
     dpid = event.connection.dpid 
     inport = event.port
 
-    if dpid not in self.arpTable:
-      self.arpTable[dpid] = {}
+    if dpid not in self.routing_table:
+      self.routing_table[dpid] = {}
     # assign static IP to switch ports
-      log.debug("update fake gateway to arpTable ")
-      for fake in self.fakeways:
-        self.arpTable[dpid][IPAddr(fake)] = Entry(of.OFPP_NONE, dpid_to_mac(dpid))
+      log.debug("update fake gateway to routing_table ")
+      for fake in self.gatewayaddr:
+        self.routing_table[dpid][IPAddr(fake)] = Entry(of.OFPP_NONE, dpid_to_mac(dpid))
 
-    if isinstance(packet.next, arp):
-      a = packet.next
+    if isinstance(packet.payload, arp):
+      a = packet.payload
       log.debug("ARP message from dpid %i %i, src address %s ask for %s", dpid, inport, str(a.protosrc), str(a.protodst))
       
-      log.debug("%i %i update arpTable %s", dpid,inport,str(a.protosrc))
-      self.arpTable[dpid][a.protosrc] = Entry(inport, packet.src)
+      log.debug("%i %i update routing_table %s", dpid,inport,str(a.protosrc))
+      self.routing_table[dpid][a.protosrc] = Entry(inport, packet.src)
+
+      self._send_message_queue(dpid, a.protosrc, packet.src, inport)
       if a.opcode == arp.REQUEST:
-        if a.protodst in self.arpTable[dpid]:
+        if a.protodst in self.routing_table[dpid]:
           r = arp()
-          r.hwtype = a.hwtype
-          r.prototype = a.prototype
-          r.hwlen = a.hwlen
-          r.protolen = a.protolen
           r.opcode = arp.REPLY
           r.hwdst = a.hwsrc
           r.protodst = a.protosrc
           r.protosrc = a.protodst
-          r.hwsrc = self.arpTable[dpid][a.protodst].mac
+          r.hwsrc = self.routing_table[dpid][a.protodst].mac
           e = ethernet(type=packet.type, src=dpid_to_mac(dpid), dst=a.hwsrc)
           e.set_payload(r)
           log.debug("%i %i answering ARP for %s" % (dpid, inport, str(r.protosrc)))
@@ -138,58 +133,43 @@ class Tutorial (object):
       msg = of.ofp_packet_out(in_port = inport, data = event.ofp,
           action = of.ofp_action_output(port = of.OFPP_FLOOD))
       event.connection.send(msg)
-    # packet.next is the packet payload
-    elif isinstance(packet.next, ipv4):
-      log.debug("%i %i IP %s => %s", dpid,inport, packet.next.srcip, packet.next.dstip)
+    elif isinstance(packet.payload, ipv4):
+      log.debug("%i %i IP %s => %s", dpid,inport, packet.payload.srcip, packet.payload.dstip)
 
       # new packet come check if it will satisfy the message queue address
-      self._send_message_queue(dpid, packet.next.srcip, packet.src, inport)
+      self._send_message_queue(dpid, packet.payload.srcip, packet.src, inport)
 
       # everytime update port/Mac info
-      log.debug("%i %i update arpTable %s", dpid,inport,str(packet.next.srcip))
-      self.arpTable[dpid][packet.next.srcip] = Entry(inport, packet.src)
-      dstaddr = packet.next.dstip
-      if dstaddr in self.arpTable[dpid]:
-        prt = self.arpTable[dpid][dstaddr].port
-        mac = self.arpTable[dpid][dstaddr].mac
+      log.debug("%i %i update routing_table %s", dpid,inport,str(packet.payload.srcip))
+      self.routing_table[dpid][packet.payload.srcip] = Entry(inport, packet.src)
+      dstaddr = packet.payload.dstip
+      if dstaddr in self.routing_table[dpid]:
+        prt = self.routing_table[dpid][dstaddr].port
+        mac = self.routing_table[dpid][dstaddr].mac
         log.debug("%i %i installing flow for %s => %s out port %i"
-                    % (dpid, inport, packet.next.srcip, dstaddr, prt))
+                    % (dpid, inport, packet.payload.srcip, dstaddr, prt))
 
         actions = []
         actions.append(of.ofp_action_dl_addr.set_dst(mac))
         actions.append(of.ofp_action_output(port = prt))
-        match = of.ofp_match.from_packet(packet, inport)
-        match.dl_src = None # Wildcard source MAC
-        msg = of.ofp_flow_mod(command=of.OFPFC_ADD,
-                              idle_timeout=FLOW_IDLE_TIMEOUT,
-                              hard_timeout=of.OFP_FLOW_PERMANENT,
-                              buffer_id=event.ofp.buffer_id,
+        msg = of.ofp_flow_mod(buffer_id=event.ofp.buffer_id,
                               actions=actions,
                               match=of.ofp_match.from_packet(packet,inport))
         event.connection.send(msg.pack())
       # TODO: what if we dont know the destniation address
       else:
-        if(dpid,dstaddr) not in self.message_queue:
+        if (dpid,dstaddr) not in self.message_queue:
           self.message_queue[(dpid,dstaddr)] = []
-        bucket = self.message_queue[(dpid,dstaddr)]
+        ptr = self.message_queue[(dpid,dstaddr)]
         entry = (event.ofp.buffer_id,inport)
-        bucket.append(entry)
-
-        if (dpid,dstaddr) in self.outstanding_arps:
-          return
-
-        self.outstanding_arps[(dpid,dstaddr)] = 1
+        ptr.append(entry)
 
         r = arp()
-        r.hwtype = r.HW_TYPE_ETHERNET
-        r.prototype = r.PROTO_TYPE_IP
-        r.hwlen = 6
-        r.protolen = r.protolen
         r.opcode = r.REQUEST
         r.hwdst = ETHER_BROADCAST
         r.protodst = dstaddr
         r.hwsrc = packet.src 
-        r.protosrc = packet.next.srcip
+        r.protosrc = packet.payload.srcip
         e = ethernet(type = ethernet.ARP_TYPE, src = packet.src, dst = ETHER_BROADCAST)
         e.set_payload(r)
         log.debug("%i %i ARPing for %s on behalf of %s" % (dpid, inport,
