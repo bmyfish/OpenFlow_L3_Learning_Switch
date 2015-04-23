@@ -76,38 +76,23 @@ class Tutorial (object):
     if (dpid,ipaddr) in self.message_queue:
       ptr = self.message_queue[(dpid,ipaddr)]
       del self.message_queue[(dpid,ipaddr)]
-      log.debug("Sending %i buffered packets to %s from %s"
-                % (len(ptr),ipaddr,dpid_to_str(dpid)))
+      log.debug("Sending buffered packets to %s from switch %s" % (ipaddr,dpid))
       for buffer_id,in_port in ptr:
         po = of.ofp_packet_out(buffer_id=buffer_id,in_port=in_port)
         po.actions.append(of.ofp_action_dl_addr.set_dst(macaddr))
         po.actions.append(of.ofp_action_output(port = port))
         core.openflow.sendToDPID(dpid, po) 
 
-  def _handle_PacketIn (self, event):
+  def act_like_router (self, packet, packet_in, dpid):
     """
-    Handles packet in messages from the switch.
-    """
-    packet = event.parsed # This is the parsed packet data.
-    if not packet.parsed:
-      log.warning("Ignoring incomplete packet")
-      return
-
-    dpid = event.connection.dpid 
-    inport = event.port
-
-    if dpid not in self.routing_table:
-      self.routing_table[dpid] = {}
-    # assign static IP to switch ports
-      log.debug("update fake gateway to routing_table ")
-      for fake in self.gatewayaddr:
-        self.routing_table[dpid][IPAddr(fake)] = Entry(of.OFPP_NONE, dpid_to_mac(dpid))
-
+    Implement router-like behavior.
+    """   
+    inport = packet_in.in_port
     if isinstance(packet.payload, arp):
       a = packet.payload
-      log.debug("ARP message from dpid %i %i, src address %s ask for %s", dpid, inport, str(a.protosrc), str(a.protodst))
+      log.debug("ARP message from switch%i port %i, src address %s ask who is %s", dpid, inport, str(a.protosrc), str(a.protodst))
       
-      log.debug("%i %i update routing_table %s", dpid,inport,str(a.protosrc))
+      log.debug("switch%i update routing_table for %s", dpid,str(a.protosrc))
       self.routing_table[dpid][a.protosrc] = Entry(inport, packet.src)
 
       self._send_message_queue(dpid, a.protosrc, packet.src, inport)
@@ -121,47 +106,46 @@ class Tutorial (object):
           r.hwsrc = self.routing_table[dpid][a.protodst].mac
           e = ethernet(type=packet.type, src=dpid_to_mac(dpid), dst=a.hwsrc)
           e.set_payload(r)
-          log.debug("%i %i answering ARP for %s" % (dpid, inport, str(r.protosrc)))
+          log.debug("switch%i answering: the mac address for %s is %s " % (dpid, str(r.protosrc), EthAddr(r.hwsrc)))
           msg = of.ofp_packet_out()
           msg.data = e.pack()
           msg.actions.append(of.ofp_action_output(port = of.OFPP_IN_PORT))
           msg.in_port = inport
-          event.connection.send(msg)
+          self.connection.send(msg)
           return
-      log.debug("%i %i flooding ARP " % (dpid, inport))
+      log.debug("controller flooding ARP, who is %s" % str(a.protodst))
 
-      msg = of.ofp_packet_out(in_port = inport, data = event.ofp,
+      msg = of.ofp_packet_out(in_port = inport, data = packet_in,
           action = of.ofp_action_output(port = of.OFPP_FLOOD))
-      event.connection.send(msg)
+      self.connection.send(msg)
     elif isinstance(packet.payload, ipv4):
-      log.debug("%i %i IP %s => %s", dpid,inport, packet.payload.srcip, packet.payload.dstip)
+      log.debug("%s send ip packet to %s, from switch%i", packet.payload.srcip, packet.payload.dstip,dpid)
 
       # new packet come check if it will satisfy the message queue address
       self._send_message_queue(dpid, packet.payload.srcip, packet.src, inport)
 
       # everytime update port/Mac info
-      log.debug("%i %i update routing_table %s", dpid,inport,str(packet.payload.srcip))
+      log.debug("switch%i update routing_table for %s", dpid,str(packet.payload.srcip))
       self.routing_table[dpid][packet.payload.srcip] = Entry(inport, packet.src)
       dstaddr = packet.payload.dstip
       if dstaddr in self.routing_table[dpid]:
         prt = self.routing_table[dpid][dstaddr].port
         mac = self.routing_table[dpid][dstaddr].mac
-        log.debug("%i %i installing flow for %s => %s out port %i"
-                    % (dpid, inport, packet.payload.srcip, dstaddr, prt))
+        log.debug("siwtch%i installing flow packet from %s to %s  the out port is %i" % (dpid, packet.payload.srcip, dstaddr, prt))
 
         actions = []
         actions.append(of.ofp_action_dl_addr.set_dst(mac))
         actions.append(of.ofp_action_output(port = prt))
-        msg = of.ofp_flow_mod(buffer_id=event.ofp.buffer_id,
+        msg = of.ofp_flow_mod(buffer_id=packet_in.buffer_id,
                               actions=actions,
                               match=of.ofp_match.from_packet(packet,inport))
-        event.connection.send(msg.pack())
+        self.connection.send(msg.pack())
       # TODO: what if we dont know the destniation address
       else:
         if (dpid,dstaddr) not in self.message_queue:
           self.message_queue[(dpid,dstaddr)] = []
         ptr = self.message_queue[(dpid,dstaddr)]
-        entry = (event.ofp.buffer_id,inport)
+        entry = (packet_in.buffer_id,inport)
         ptr.append(entry)
 
         r = arp()
@@ -172,13 +156,39 @@ class Tutorial (object):
         r.protosrc = packet.payload.srcip
         e = ethernet(type = ethernet.ARP_TYPE, src = packet.src, dst = ETHER_BROADCAST)
         e.set_payload(r)
-        log.debug("%i %i ARPing for %s on behalf of %s" % (dpid, inport,
-         str(r.protodst), str(r.protosrc)))
+        log.debug("controller broadcast ARP_REQUEST who is %s" % str(r.protodst))
         msg = of.ofp_packet_out()
         msg.data = e.pack()
         msg.actions.append(of.ofp_action_output(port = of.OFPP_FLOOD))
         msg.in_port = inport
-        event.connection.send(msg)
+        self.connection.send(msg)   
+
+
+  def _handle_PacketIn (self, event):
+    """
+    Handles packet in messages from the switch.
+    """
+    packet = event.parsed # This is the parsed packet data.
+    if not packet.parsed:
+      log.warning("Ignoring incomplete packet")
+      return
+
+    dpid = event.connection.dpid 
+
+    if dpid not in self.routing_table:
+      self.routing_table[dpid] = {}
+    # assign static IP to switch ports
+      log.debug("update fake gateway to routing_table for switch%i ", dpid)
+      for fake in self.gatewayaddr:
+        self.routing_table[dpid][IPAddr(fake)] = Entry(of.OFPP_NONE, dpid_to_mac(dpid))
+    
+    packet_in = event.ofp # The actual ofp_packet_in message.
+
+    # Comment out the following line and uncomment the one after
+    # when starting the exercise.
+    #self.act_like_hub(packet, packet_in)
+    self.act_like_router(packet, packet_in, dpid)
+
 
 def launch ():
   """
