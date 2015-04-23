@@ -66,7 +66,8 @@ class Tutorial (object):
     #                      '10.0.3.0/24': ['10.0.3.100', 's1-eth3', '10.0.3.1', 3]}
     self.gatewayaddr = {"10.0.1.1": "000000000001", 
                         "10.0.2.1": "000000000002", 
-                        "10.0.3.1": "000000000003"}
+                        "10.0.3.1": "000000000003",
+                        "10.0.4.1": "000000000004"}
     self.routing_table = {}
     self.message_queue = {}
 
@@ -75,7 +76,7 @@ class Tutorial (object):
     if (dpid,ipaddr) in self.message_queue:
       ptr = self.message_queue[(dpid,ipaddr)]
       del self.message_queue[(dpid,ipaddr)]
-      log.debug("Sending buffered packets to %s from switch%s" % (ipaddr,dpid))
+      log.debug("Sending buffered packets to %s from switch %s" % (ipaddr,dpid))
       for buffer_id,in_port in ptr:
         po = of.ofp_packet_out(buffer_id=buffer_id,in_port=in_port)
         po.actions.append(of.ofp_action_dl_addr.set_dst(macaddr))
