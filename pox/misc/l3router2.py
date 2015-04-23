@@ -76,7 +76,7 @@ class Tutorial (object):
     if (dpid,ipaddr) in self.message_queue:
       ptr = self.message_queue[(dpid,ipaddr)]
       del self.message_queue[(dpid,ipaddr)]
-      log.debug("Sending buffered packets to %s from switch %s" % (ipaddr,dpid))
+      log.debug("Sending buffered packets to %s from switch%s" % (ipaddr,dpid))
       for buffer_id,in_port in ptr:
         po = of.ofp_packet_out(buffer_id=buffer_id,in_port=in_port)
         po.actions.append(of.ofp_action_dl_addr.set_dst(macaddr))
@@ -89,14 +89,13 @@ class Tutorial (object):
     """   
     inport = packet_in.in_port
     if isinstance(packet.payload, arp):
-      a = packet.payload
-      log.debug("ARP message from switch%i port %i, src address %s ask who is %s", dpid, inport, str(a.protosrc), str(a.protodst))
-      
+      a = packet.payload      
       log.debug("switch%i update routing_table for %s", dpid,str(a.protosrc))
       self.routing_table[dpid][a.protosrc] = Entry(inport, packet.src)
 
       self._send_message_queue(dpid, a.protosrc, packet.src, inport)
       if a.opcode == arp.REQUEST:
+        log.debug("ARP REQUEST received from switch%i port %i, src address %s ask who is %s", dpid, inport, str(a.protosrc), str(a.protodst))
         if a.protodst in self.routing_table[dpid]:
           r = arp()
           r.opcode = arp.REPLY
@@ -140,7 +139,7 @@ class Tutorial (object):
                               actions=actions,
                               match=of.ofp_match.from_packet(packet,inport))
         self.connection.send(msg.pack())
-      # TODO: what if we dont know the destniation address
+
       else:
         log.debug("the destionation address %s is unknown, buffer the packet " % str(dstaddr))
         if (dpid,dstaddr) not in self.message_queue:

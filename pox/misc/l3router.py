@@ -139,7 +139,7 @@ class Tutorial (object):
                               actions=actions,
                               match=of.ofp_match.from_packet(packet,inport))
         self.connection.send(msg.pack())
-      # TODO: what if we dont know the destniation address
+
       else:
         log.debug("the destionation address %s is unknown, buffer the packet " % str(dstaddr))
         if (dpid,dstaddr) not in self.message_queue:
