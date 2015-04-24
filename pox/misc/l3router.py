@@ -26,6 +26,7 @@ from pox.core import core
 from pox.lib.packet.ethernet import ethernet, ETHER_BROADCAST
 from pox.lib.packet.ipv4 import ipv4
 from pox.lib.packet.arp import arp
+from pox.lib.packet.icmp import *
 from pox.lib.addresses import IPAddr, EthAddr
 from pox.lib.util import str_to_bool, dpid_to_str
 
@@ -64,9 +65,13 @@ class Tutorial (object):
     # self.routing_table = {'10.0.1.0/24': ['10.0.1.100', 's1-eth1', '10.0.1.1', 1],
     #                      '10.0.2.0/24': ['10.0.2.100', 's1-eth2', '10.0.2.1', 2],
     #                      '10.0.3.0/24': ['10.0.3.100', 's1-eth3', '10.0.3.1', 3]}
+    #self.gatewayaddr = {IPAddr("10.0.1.1"): EthAddr("000000000001"), 
+    #                    IPAddr("10.0.1.2"): EthAddr("000000000002"), 
+    #                    IPAddr("10.0.1.3"): EthAddr("000000000003")}
     self.gatewayaddr = {"10.0.1.1": "000000000001", 
                         "10.0.2.1": "000000000002", 
-                        "10.0.3.1": "000000000003"}
+                        "10.0.3.1": "000000000003",
+                        "10.0.4.1": "000000000004"}
     self.routing_table = {}
     self.message_queue = {}
 
@@ -88,14 +93,14 @@ class Tutorial (object):
     """   
     inport = packet_in.in_port
     if isinstance(packet.payload, arp):
-      a = packet.payload
-      log.debug("ARP message from switch%i port %i, src address %s ask who is %s", dpid, inport, str(a.protosrc), str(a.protodst))
-      
+      a = packet.payload      
       log.debug("switch%i update routing_table for %s", dpid,str(a.protosrc))
       self.routing_table[dpid][a.protosrc] = Entry(inport, packet.src)
 
       self._send_message_queue(dpid, a.protosrc, packet.src, inport)
       if a.opcode == arp.REQUEST:
+        log.debug("ARP REQUEST receive from switch%i port %i, src address %s ask who is %s", dpid, inport, str(a.protosrc), str(a.protodst))
+
         if a.protodst in self.routing_table[dpid]:
           r = arp()
           r.opcode = arp.REPLY
@@ -112,11 +117,15 @@ class Tutorial (object):
           msg.in_port = inport
           self.connection.send(msg)
           return
-      log.debug("controller flooding ARP, who is %s" % str(a.protodst))
-
-      msg = of.ofp_packet_out(in_port = inport, data = packet_in,
-          action = of.ofp_action_output(port = of.OFPP_FLOOD))
-      self.connection.send(msg)
+        else:
+          log.debug("controller flooding ARP, who is %s" % str(a.protodst))
+          msg = of.ofp_packet_out(in_port = inport, data = packet_in,
+                                  action = of.ofp_action_output(port = of.OFPP_FLOOD))
+          self.connection.send(msg)
+      elif a.opcode == arp.REPLY:
+          log.debug("ARP REPLY Message I am %s my mac address is %s", str(a.protosrc), EthAddr(packet.src))
+      else:
+          log.debug("Some other ARP message")
     elif isinstance(packet.payload, ipv4):
       log.debug("%s send ip packet to %s, from switch%i", packet.payload.srcip, packet.payload.dstip,dpid)
 
@@ -127,6 +136,36 @@ class Tutorial (object):
       log.debug("switch%i update routing_table for %s", dpid,str(packet.payload.srcip))
       self.routing_table[dpid][packet.payload.srcip] = Entry(inport, packet.src)
       dstaddr = packet.payload.dstip
+
+      if str(dstaddr) in self.gatewayaddr:
+       # log.debug("reach here1")
+
+        if packet.payload.protocol == ipv4.ICMP_PROTOCOL:
+          icmp_packet = packet.payload.payload
+          if icmp_packet.type == TYPE_ECHO_REQUEST:
+              log.debug("Received icmp echo request to the interface from %s", str(packet.payload.srcip))
+              echo_req = icmp_packet.next
+              echo_msg = echo(id = echo_req.id, seq = echo_req.seq + 1)
+              icmp_reply = icmp(type = TYPE_ECHO_REPLY)
+              icmp_reply.set_payload(echo_msg)
+              ip_packet = ipv4()
+              ip_packet.srcip = dstaddr
+              ip_packet.dstip = packet.payload.srcip
+              ip_packet.protocol = ipv4.ICMP_PROTOCOL
+              ip_packet.set_payload(icmp_reply)
+              e = ethernet(type=packet.type, src=packet.dst, dst=packet.src)
+         #     log.debug("reach here2")
+
+              e.set_payload(ip_packet)
+              log.debug("controller response icmp message")
+              msg = of.ofp_packet_out()
+              msg.data = e.pack()
+              msg.actions.append(of.ofp_action_output(port = of.OFPP_IN_PORT))
+              msg.in_port = inport
+              self.connection.send(msg)
+              return
+
+
       if dstaddr in self.routing_table[dpid]:
         prt = self.routing_table[dpid][dstaddr].port
         mac = self.routing_table[dpid][dstaddr].mac
@@ -179,8 +218,9 @@ class Tutorial (object):
     # assign static IP to switch ports
       for k, v in self.gatewayaddr.iteritems():
         log.debug("set fake gateway to switch%i, IP:%s MAC:%s",  dpid, k, v)
+        #self.routing_table[dpid][k] = Entry(of.OFPP_NONE, v)
         self.routing_table[dpid][IPAddr(k)] = Entry(of.OFPP_NONE, EthAddr(v))
-    
+
     packet_in = event.ofp # The actual ofp_packet_in message.
 
     # Comment out the following line and uncomment the one after
