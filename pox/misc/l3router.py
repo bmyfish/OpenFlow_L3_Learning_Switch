@@ -71,6 +71,10 @@ class Tutorial (object):
                         "10.0.3.1": "000000000003"}
     self.routing_table = {}
     self.message_queue = {}
+    self.host_addr = ["10.0.1.100","10.0.2.100","10.0.3.100"]
+    self.mac_to_ip = {"00:00:00:00:00:01" : "10.0.1.1", 
+                      "00:00:00:00:00:02" : "10.0.2.1", 
+                      "00:00:00:00:00:03" : "10.0.3.1"}
 
 
   def _send_message_queue (self, dpid, ipaddr, macaddr, port):
@@ -134,10 +138,13 @@ class Tutorial (object):
       self.routing_table[dpid][packet.payload.srcip] = Entry(inport, packet.src)
       dstaddr = packet.payload.dstip
 
-      if str(dstaddr) in self.gatewayaddr:
+
+
+      #if str(dstaddr) in self.gatewayaddr:
        # log.debug("reach here1")
 
-        if packet.payload.protocol == ipv4.ICMP_PROTOCOL:
+      if packet.payload.protocol == ipv4.ICMP_PROTOCOL:
+        if str(dstaddr) in self.gatewayaddr:
           icmp_packet = packet.payload.payload
           if icmp_packet.type == TYPE_ECHO_REQUEST:
               log.debug("Received icmp echo request to the interface from %s", str(packet.payload.srcip))
@@ -161,6 +168,33 @@ class Tutorial (object):
               msg.in_port = inport
               self.connection.send(msg)
               return
+        if str(dstaddr) not in self.host_addr:
+          log.debug("destionation %s is out of range" % str(dstaddr))
+          #if packet.payload.protocol == ipv4.ICMP_PROTOCOL:
+            #icmp_packet = packet.payload.payload
+            #if icmp_packet.type == TYPE_ECHO_REQUEST:
+          log.debug("unreachable from %s" % str(packet.payload.srcip))
+          unr_msg = unreach()
+          icmp_unr = icmp(type = TYPE_DEST_UNREACH, code = CODE_UNREACH_HOST)
+          icmp_unr.set_payload(unr_msg)
+          ip_packet = ipv4()
+          ip_packet.srcip = IPAddr(self.mac_to_ip[str(packet.dst)])
+          ip_packet.dstip = packet.payload.srcip
+          ip_packet.protocol = ipv4.ICMP_PROTOCOL
+          ip_packet.set_payload(icmp_unr)
+          e = ethernet(type=packet.type, src=packet.dst, dst=packet.src)
+         #     log.debug("reach here2")
+
+          e.set_payload(ip_packet)
+          log.debug("controller response icmp message")
+          msg = of.ofp_packet_out()
+          msg.data = e.pack()
+          msg.actions.append(of.ofp_action_output(port = of.OFPP_IN_PORT))
+          msg.in_port = inport
+          self.connection.send(msg)
+          return
+
+
 
 
       if dstaddr in self.routing_table[dpid]:
@@ -177,7 +211,15 @@ class Tutorial (object):
         self.connection.send(msg.pack())
 
       else:
-        log.debug("the destionation address %s is unknown, buffer the packet " % str(dstaddr))
+        #if str(dstaddr) not in self.host_addr:
+          #log.debug("destionation %s is out of range" % str(dstaddr))
+          #if packet.payload.protocol == ipv4.ICMP_PROTOCOL:
+            #icmp_packet = packet.payload.payload
+            #if icmp_packet.type == TYPE_ECHO_REQUEST:
+          #log.debug("unreachable from %s" % str(packet.payload.srcip))
+          #return
+
+        log.debug("the destionation address %s is unknown but it is within the range, buffer the packet " % str(dstaddr))
         if (dpid,dstaddr) not in self.message_queue:
           self.message_queue[(dpid,dstaddr)] = []
         ptr = self.message_queue[(dpid,dstaddr)]
