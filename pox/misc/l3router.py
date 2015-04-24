@@ -175,6 +175,7 @@ class Tutorial (object):
             #if icmp_packet.type == TYPE_ECHO_REQUEST:
           log.debug("unreachable from %s" % str(packet.payload.srcip))
           unr_msg = unreach()
+          unr_msg.payload = packet.payload
           icmp_unr = icmp(type = TYPE_DEST_UNREACH, code = CODE_UNREACH_HOST)
           icmp_unr.set_payload(unr_msg)
           ip_packet = ipv4()
@@ -193,9 +194,6 @@ class Tutorial (object):
           msg.in_port = inport
           self.connection.send(msg)
           return
-
-
-
 
       if dstaddr in self.routing_table[dpid]:
         prt = self.routing_table[dpid][dstaddr].port
