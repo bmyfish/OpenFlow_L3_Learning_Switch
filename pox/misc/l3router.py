@@ -15,10 +15,8 @@
 """
 This component is for use with the OpenFlow tutorial.
 
-It acts as a simple hub, but can be modified to act like an L2
-learning switch.
+Modified tutorial switch to act like an L3 router
 
-It's roughly similar to the one Brandon Heller did for NOX.
 """
 
 from pox.core import core
@@ -70,8 +68,7 @@ class Tutorial (object):
     #                    IPAddr("10.0.1.3"): EthAddr("000000000003")}
     self.gatewayaddr = {"10.0.1.1": "000000000001", 
                         "10.0.2.1": "000000000002", 
-                        "10.0.3.1": "000000000003",
-                        "10.0.4.1": "000000000004"}
+                        "10.0.3.1": "000000000003"}
     self.routing_table = {}
     self.message_queue = {}
 
