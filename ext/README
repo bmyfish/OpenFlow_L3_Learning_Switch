@@ -1,2 +1,70 @@
-This directory is not under version control, so it makes a good place to
-put your own projects.
+reference:
+	https://github.com/mininet/openflow-tutorial/wiki
+	https://openflow.stanford.edu/display/ONL/POX+Wiki
+Files:
+	of_tutorial.py
+		Pox controller for "Create a Learning Switch".
+	mytopo_part1.py
+		Topology file for Mininet for "Router Execise Part 1".
+	l3router_part1.py
+		Pox controller for "Router Execise Part 1".
+	mytopo_part2.py
+		Topology file for Mininet for "Router Execise Part 2".
+	l3router_part2.py
+		Pox controller for "Router Execise Part 2".
+
+How to run:
+*Create a Learning Switch exercise
+	1.Start Mininet Virtuall Machine (VM).
+	2.Open a terminal login to VM using SSH.
+	3.Once logged in, run 
+		sudo mn -c 
+	  to reset Mininet on terminal.
+	4.On the Mininet terminal, run
+		sudo mn --topo single,3 --mac --switch ovsk --controller remote
+	5.Open another terminal, login to VM using SSH, copy "of_tutorial.py" to "~/pox/pox/misc/", then run
+		cd ~/pox
+		./pox.py log.level --DEBUG misc.of_tutorial
+	Optional:
+		If you run the controller in your host machine, from your mininet ssh window run
+			sudo route
+		Look for the line that starts with default and retrive the Gateway address. If the address ends with .2 or .1, and later you are unable to connect Mininet to host, try the same IP but change the .1 with .2 or .2 with .1
+		On the Mininet treminal run
+			sudo mn --topo single,3 --mac --switch ovsk --controller remote,ip=<your_host_ip>,port=6633
+
+*Router Execise Part 1
+	1.Start Mininet Virtuall Machine (VM).
+	2.Open a terminal login to VM using SSH.
+	3.Once logged in, run 
+		sudo mn -c 
+	  to reset mininet on terminal.
+	4.Copy "mytopo_part1.py" to "~" (home directory), then run
+		sudo mn --custom mytopo_part1.py --topo mytopo --mac --controller remote
+	5.Open another terminal, login to VM using SSH, copy "l3router_part1.py" to "~/pox/pox/misc/", then run
+		cd ~/pox
+		./pox.py log.level --DEBUG misc.l3router_part1
+	Optional:
+		If you run the controller in your host machine, from your mininet ssh window run
+			sudo route
+		Look for the line that starts with default and retrive the Gateway address. If the address ends with .2 or .1, and later you are unable to connect Mininet to host, try the same IP but change the .1 with .2 or .2 with .1
+		On the Mininet treminal run
+			sudo mn --custom mytopo_part1.py --topo mytopo --mac --controller remote,ip=<your_host_ip>,port=6633
+
+How to run:
+*Router Execise Part 2
+	1.Start Mininet Virtuall Machine (VM).
+	2.Open a terminal login to VM using SSH.
+	3.Once logged in, run 
+		sudo mn -c 
+	  to reset Mininet on terminal.
+	4.Copy "mytopo_part2.py" to "~" (home directory), then run
+		sudo mn --custom mytopo_part2.py --topo mytopo --mac --controller remote
+	5.Open another terminal, login to VM using SSH, copy "l3router_part2.py" to "~/pox/pox/misc/", then run
+		cd ~/pox
+		./pox.py log.level --DEBUG misc.l3router_part2
+	Optional:
+		If you run the controller in your host machine, from your mininet ssh window run
+			sudo route
+		Look for the line that starts with default and retrive the Gateway address. If the address ends with .2 or .1, and later you are unable to connect Mininet to host, try the same IP but change the .1 with .2 or .2 with .1
+		On the Mininet treminal run
+			sudo mn --custom mytopo_part2.py --topo mytopo --mac --controller remote,ip=<your_host_ip>,port=6633
