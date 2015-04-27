@@ -1,6 +1,3 @@
-reference:
-	https://github.com/mininet/openflow-tutorial/wiki
-	https://openflow.stanford.edu/display/ONL/POX+Wiki
 Files:
 	of_tutorial.py
 		Pox controller for "Create a Learning Switch".
@@ -68,3 +65,7 @@ How to run:
 		Look for the line that starts with default and retrive the Gateway address. If the address ends with .2 or .1, and later you are unable to connect Mininet to host, try the same IP but change the .1 with .2 or .2 with .1
 		On the Mininet treminal run
 			sudo mn --custom mytopo_part2.py --topo mytopo --mac --controller remote,ip=<your_host_ip>,port=6633
+
+Reference:
+	https://github.com/mininet/openflow-tutorial/wiki
+	https://openflow.stanford.edu/display/ONL/POX+Wiki
