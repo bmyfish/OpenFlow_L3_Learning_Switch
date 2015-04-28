@@ -1,13 +1,13 @@
 Files:
-	of_tutorial.py
+	l2_learning_switch.py
 		Pox controller for "Create a Learning Switch".
 	mytopo_part1.py
 		Topology file for Mininet for "Router Execise Part 1".
-	l3router_part1.py
+	l3_learning_switch_part1.py
 		Pox controller for "Router Execise Part 1".
 	mytopo_part2.py
 		Topology file for Mininet for "Router Execise Part 2".
-	l3router_part2.py
+	l3_learning_switch_part2.py
 		Pox controller for "Router Execise Part 2".
 
 How to run:
@@ -21,7 +21,7 @@ How to run:
 		sudo mn --topo single,3 --mac --switch ovsk --controller remote
 	5.Open another terminal, login to VM using SSH, copy "of_tutorial.py" to "~/pox/pox/misc/", then run
 		cd ~/pox
-		./pox.py log.level --DEBUG misc.of_tutorial
+		./pox.py log.level --DEBUG misc.l2_learning_switch
 	Optional:
 		If you run the controller in your host machine, from your mininet ssh window run
 			sudo route
@@ -39,7 +39,7 @@ How to run:
 		sudo mn --custom mytopo_part1.py --topo mytopo --mac --controller remote
 	5.Open another terminal, login to VM using SSH, copy "l3router_part1.py" to "~/pox/pox/misc/", then run
 		cd ~/pox
-		./pox.py log.level --DEBUG misc.l3router_part1
+		./pox.py log.level --DEBUG misc.l3_learning_switch_part1
 	Optional:
 		If you run the controller in your host machine, from your mininet ssh window run
 			sudo route
@@ -58,7 +58,7 @@ How to run:
 		sudo mn --custom mytopo_part2.py --topo mytopo --mac --controller remote
 	5.Open another terminal, login to VM using SSH, copy "l3router_part2.py" to "~/pox/pox/misc/", then run
 		cd ~/pox
-		./pox.py log.level --DEBUG misc.l3router_part2
+		./pox.py log.level --DEBUG misc.l3_learning_switch_part2
 	Optional:
 		If you run the controller in your host machine, from your mininet ssh window run
 			sudo route
